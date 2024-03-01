@@ -1,8 +1,6 @@
-#define _XOPEN_SOURCE 700
 #include <stdlib.h>
 #include <cairo/cairo.h>
 #include <pango/pangocairo.h>
-#include <math.h>
 
 #include "config.h"
 #include "criteria.h"
@@ -12,6 +10,8 @@
 #include "wayland.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "icon.h"
+
+#define M_PI 3.14159265358979323846
 
 // HiDPI conventions: local variables are in surface-local coordinates, unless
 // they have a "buffer_" prefix, in which case they are in buffer-local
@@ -271,30 +271,32 @@ static int render_notification(cairo_t *cairo, struct mako_state *state, struct 
 		switch (style->icon_location) {
 		case MAKO_ICON_LOCATION_LEFT:
 			xpos = offset_x + style->border_size +
-				(text_x - icon->width) / 2;
+				style->padding.left;
 			ypos = ypos_center;
 			break;
 		case MAKO_ICON_LOCATION_RIGHT:
 			xpos = offset_x + notif_width - style->border_size -
-				icon->width - style->margin.right;
+				style->padding.right - icon->width;
 			ypos = ypos_center;
 			break;
 		case MAKO_ICON_LOCATION_TOP:
 			xpos = xpos_center;
-			ypos = offset_y + style->border_size;
+			ypos = offset_y + style->border_size +
+				style->padding.top;
 			break;
 		case MAKO_ICON_LOCATION_BOTTOM:
 			xpos = xpos_center;
-			ypos = offset_y + text_y + text_height + style->margin.bottom;
+			ypos = offset_y + notif_height - style->border_size -
+				style->padding.bottom - icon->height;
 			break;
 		}
 		draw_icon(cairo, icon, xpos, ypos, scale);
 	}
 
 	if (icon_vertical) {
-		text_x = (notif_width - text_width) / 2;
+		text_x = (notif_width - text_width - border_size) / 2;
 	} else {
-		text_y = (notif_height - text_height) / 2;
+		text_y = (notif_height - text_height - border_size) / 2;
 	}
 
 	// Render text
@@ -444,10 +446,10 @@ int render(struct mako_surface *surface, struct pool_buffer *buffer, int scale) 
 		int hidden_height = render_notification(
 			cairo, state, surface, style, text, NULL, total_height, scale, NULL, 0);
 		free(text);
-		destroy_notification(hidden_notif);
 
 		total_height += hidden_height;
 		pending_bottom_margin = style->margin.bottom;
+		destroy_notification(hidden_notif);
 	}
 
 	return total_height + pending_bottom_margin;

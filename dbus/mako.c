@@ -1,5 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,7 +57,7 @@ static int handle_dismiss_last_notification(sd_bus_message *msg, void *data,
 
 	struct mako_notification *notif =
 		wl_container_of(state->notifications.next, notif, link);
-	close_notification(notif, MAKO_NOTIFICATION_CLOSE_DISMISSED);
+	close_notification(notif, MAKO_NOTIFICATION_CLOSE_DISMISSED, true);
 	set_dirty(notif->surface);
 
 done:
@@ -83,7 +81,7 @@ static int handle_dismiss_notification(sd_bus_message *msg, void *data,
 			if (dismiss_group) {
 				close_group_notifications(notif, MAKO_NOTIFICATION_CLOSE_DISMISSED);
 			} else {
-				close_notification(notif, MAKO_NOTIFICATION_CLOSE_DISMISSED);
+				close_notification(notif, MAKO_NOTIFICATION_CLOSE_DISMISSED, true);
 			}
 			set_dirty(notif->surface);
 			break;
@@ -140,9 +138,7 @@ done:
 	return sd_bus_reply_method_return(msg, "");
 }
 
-static int handle_list_notifications(sd_bus_message *msg, void *data,
-		sd_bus_error *ret_error) {
-	struct mako_state *state = data;
+static int handle_list(sd_bus_message *msg, struct wl_list *list) {
 
 	sd_bus_message *reply = NULL;
 	int ret = sd_bus_message_new_method_return(msg, &reply);
@@ -156,7 +152,7 @@ static int handle_list_notifications(sd_bus_message *msg, void *data,
 	}
 
 	struct mako_notification *notif;
-	wl_list_for_each(notif, &state->notifications, link) {
+	wl_list_for_each(notif, list, link) {
 		ret = sd_bus_message_open_container(reply, 'a', "{sv}");
 		if (ret < 0) {
 			return ret;
@@ -200,6 +196,12 @@ static int handle_list_notifications(sd_bus_message *msg, void *data,
 
 		ret = sd_bus_message_append(reply, "{sv}", "id",
 			"u", notif->id);
+		if (ret < 0) {
+			return ret;
+		}
+
+		ret = sd_bus_message_append(reply, "{sv}", "urgency",
+			"y", notif->urgency);
 		if (ret < 0) {
 			return ret;
 		}
@@ -265,6 +267,18 @@ static int handle_list_notifications(sd_bus_message *msg, void *data,
 
 	sd_bus_message_unref(reply);
 	return 0;
+}
+
+static int handle_list_notifications(sd_bus_message *msg, void *data,
+		sd_bus_error *ret_error) {
+	struct mako_state *state = data;
+	return handle_list(msg, &state->notifications);
+}
+
+static int handle_list_history(sd_bus_message *msg, void *data,
+		sd_bus_error *ret_error) {
+	struct mako_state *state = data;
+	return handle_list(msg, &state->history);
 }
 
 /**
@@ -428,6 +442,7 @@ static const sd_bus_vtable service_vtable[] = {
 	SD_BUS_METHOD("InvokeAction", "us", "", handle_invoke_action, SD_BUS_VTABLE_UNPRIVILEGED),
 	SD_BUS_METHOD("RestoreNotification", "", "", handle_restore_action, SD_BUS_VTABLE_UNPRIVILEGED),
 	SD_BUS_METHOD("ListNotifications", "", "aa{sv}", handle_list_notifications, SD_BUS_VTABLE_UNPRIVILEGED),
+	SD_BUS_METHOD("ListHistory", "", "aa{sv}", handle_list_history, SD_BUS_VTABLE_UNPRIVILEGED),
 	SD_BUS_METHOD("Reload", "", "", handle_reload, SD_BUS_VTABLE_UNPRIVILEGED),
 	SD_BUS_METHOD("SetMode", "s", "", handle_set_mode, SD_BUS_VTABLE_UNPRIVILEGED),
 	SD_BUS_METHOD("ListModes", "", "as", handle_list_modes, SD_BUS_VTABLE_UNPRIVILEGED),
